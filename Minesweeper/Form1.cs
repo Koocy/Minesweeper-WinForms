@@ -3,65 +3,75 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
 using System.Drawing.Text;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Minesweeper
 {
-    public class Box : Label
+    public partial class GameForm : Form
     {
-        public bool isBomb = false, isOpen = false, isFlag = false;
-        public int nearby = 0;
-        public int x, y;
-
-        public Box() : base()
-        {
-            this.TabStop = false;
-        }
-    }
-
-    public partial class Form1 : Form
-    {
-        public static bool victory;
-
         [DllImport("user32.dll")]
         private static extern bool SetProcessDPIAware();
 
-        static Bitmap flagImageForBox;
-        static Bitmap bombImageForBox;
+        SettingsMenu settingsMenu;
 
-        static PictureBox flagIcon;
-        static PictureBox restartButton;
+        bool _gameOver, victory, firstClick, createGraphics;
+        int firstClickX, firstClickY;
+        public static bool userChangedSettings = false;
 
-        static int nBomb;
-        static int columns, rows;
-        static Box[,] Boxes;
-        static int rFlag, sFlag;
-        static Label showRFlag;
-        static int boxW, boxH;
-        static int topPanelH, gameAreaH;
+        Bitmap flagImageForBox;
+        Bitmap bombImageForBox;
 
-        static Color defaultBoxColor;
-        static Color boxOpenColor = Color.LightGray;
+        PictureBox flagIcon;
+        PictureBox restartButton;
+        PictureBox settingsButton;
 
-        static void assignDefaultValues()
+        Label showRFlag = new Label();
+        Label gameOverResultShow = new Label();
+
+        //The following values can be set by user
+        public static int nBomb, columns, rows;
+        //
+
+        //Calculate these values
+        Box[,] Boxes;
+        int openBoxes;
+        int rFlag, sFlag;
+        int boxW, boxH;
+        //
+
+        //Hardcoded, for now
+        int topPanelH, gameAreaH;
+        //
+
+        //TODO: Make different visual styles
+        Color defaultBoxColor;
+        Color boxOpenColor = Color.LightGray;
+        //
+
+        void assignDefaultValues()
         {
+            _gameOver = false;
             victory = false;
+            firstClick = true;
+            firstClickX = -1; firstClickY = -1;
+            createGraphics = true;
 
-            restartButton = new PictureBox();
-            flagIcon = new PictureBox();
-            showRFlag = new Label();
+            if (!userChangedSettings)
+            {
+                nBomb = 2;
+                columns = 10;
+                rows = 12;
+            }
 
-            nBomb = 1;
+            openBoxes = 0;
             rFlag = nBomb;
             sFlag = 0;
-            columns = 10;
-            rows = 12;
-
-            Boxes = new Box[columns, rows];
 
             topPanelH = 80;
         }
 
-        static void assignBombs()
+        void assignBombs()
         {
             int bombs = 0;
             Random random = new Random();
@@ -71,7 +81,7 @@ namespace Minesweeper
                 int rnd1 = random.Next(0, columns);
                 int rnd2 = random.Next(0, rows);
 
-                if (!Boxes[rnd1, rnd2].isBomb)
+                if (!Boxes[rnd1, rnd2].isBomb && !(firstClickX == rnd1 && firstClickY == rnd2))
                 {
                     Boxes[rnd1, rnd2].isBomb = true;
 
@@ -86,7 +96,7 @@ namespace Minesweeper
 
                             if (nx >= 0 && nx < columns && ny >= 0 && ny < rows)
                             {
-                                Boxes[nx, ny].nearby++;
+                                Boxes[nx, ny].nearbyBombs++;
                             }
                         }
                     }
@@ -96,7 +106,7 @@ namespace Minesweeper
             }
         }
     
-        static void openNearbyBoxes(int x, int y)
+        void openNearbyBoxes(int x, int y)
         {
             if (x < 0 || x > columns - 1 || y < 0 || y > rows - 1) return;
 
@@ -105,12 +115,19 @@ namespace Minesweeper
             if (box.isOpen || box.isFlag || box.isBomb) return;
 
             box.isOpen = true;
+            openBoxes++;
+            Console.WriteLine("open boxes: " + openBoxes);
+            Console.WriteLine("rows*columns: " + rows * columns);
+            Console.WriteLine("Boxes: " + Boxes.Length);
+            Console.WriteLine("Bombs: " + nBomb);
+            Console.WriteLine("rflag: " + rFlag);
+            Console.WriteLine("sFlag: " + sFlag);
             box.BackColor = boxOpenColor;
-            if (box.nearby > 0)
+            if (box.nearbyBombs > 0)
             {
-                box.Text = box.nearby.ToString();
+                box.Text = box.nearbyBombs.ToString();
 
-                switch(box.nearby)
+                switch(box.nearbyBombs)
                 {
                     case 1:
                         box.ForeColor = Color.Blue;
@@ -157,15 +174,53 @@ namespace Minesweeper
             }
         }
 
-        void initGameWindow()
+        void openNearbyBoxesNumbered(int x, int y)
         {
+            for (int i = -1; i <= 1; i++)
+            {
+                for (int j = -1; j <= 1; j++)
+                {
+                    if (j == 0 && i == 0) continue;
+
+                    int nx = x + j;
+                    int ny = y + i;
+
+                    if (nx < 0 || nx >= columns || ny < 0 || ny >= rows) continue;
+
+                    if (!Boxes[nx, ny].isOpen && !Boxes[nx, ny].isFlag)
+                    {
+                        if (Boxes[nx, ny].isBomb)
+                        {
+                            _gameOver = true;
+                            victory = false;
+                            gameOver();
+                            return;
+                        }
+
+                        else
+                        {
+                            openNearbyBoxes(nx, ny);
+                        }
+                    }
+                }
+            }
+        }
+
+        float fontSizeBox = 0.00f;
+        public void initGame()
+        {
+            this.SuspendLayout();
+
             this.AutoScaleMode = AutoScaleMode.Dpi;
             this.FormBorderStyle = FormBorderStyle.FixedToolWindow;
             this.ShowInTaskbar = true;
             this.Text = "Minesweeper";
             this.ClientSize = new Size(600, 800);
             this.StartPosition = FormStartPosition.Manual;
+            if (!userChangedSettings)
             this.Left = 10; this.Top = 10;
+
+            assignDefaultValues();
 
             gameAreaH = this.ClientSize.Height - topPanelH;
             boxW = this.ClientSize.Width / columns;
@@ -173,6 +228,10 @@ namespace Minesweeper
 
             flagImageForBox = new Bitmap(Resource1.flag, new Size(boxW, boxH));
             bombImageForBox = new Bitmap(Resource1.bomb, new Size(boxW, boxH));
+
+            flagIcon = new PictureBox();
+            restartButton = new PictureBox();
+            settingsButton = new PictureBox();
 
             restartButton.Size = new Size(80, 80);
             restartButton.Left = this.ClientSize.Width / 2 - restartButton.Width / 2;
@@ -182,7 +241,7 @@ namespace Minesweeper
             this.Controls.Add(restartButton);
 
             flagIcon.Size = new Size(80, 80);
-            flagIcon.Left = this.ClientSize.Width - flagIcon.Width - boxW;
+            flagIcon.Left = this.ClientSize.Width - flagIcon.Width - 60;
             flagIcon.Top = 0;
             flagIcon.Image = Resource1.flag;
             this.Controls.Add(flagIcon);
@@ -191,16 +250,35 @@ namespace Minesweeper
             showRFlag.Left = flagIcon.Right;
             showRFlag.Top = 0;
             showRFlag.Text = rFlag.ToString();
-            using (var g = showRFlag.CreateGraphics())
+            showRFlag.TextAlign = ContentAlignment.MiddleCenter;
+            float fontSizeRFlag = 0.00f;
+            if (createGraphics)
             {
-                var fontSize = ((Math.Min(showRFlag.Width, showRFlag.Height) * (72f / g.DpiY)) - 1) / 2;
-                showRFlag.TextAlign = ContentAlignment.MiddleCenter;
-                showRFlag.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSize, FontStyle.Bold);
+                using (var g = showRFlag.CreateGraphics())
+                {
+                    fontSizeRFlag = ((Math.Min(showRFlag.Width, showRFlag.Height) * (72f / g.DpiY)) - 1) / 2;
+                }
             }
+            showRFlag.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSizeRFlag, FontStyle.Bold);
             this.Controls.Add(showRFlag);
 
-            int posx = 0, posy = topPanelH;
+            gameOverResultShow.Text = "You Lose";
+            gameOverResultShow.Left = 10;
+            gameOverResultShow.Font = new Font(new FontFamily(GenericFontFamilies.Serif), 16, FontStyle.Bold);
+            gameOverResultShow.AutoSize = true;
+            gameOverResultShow.Top = topPanelH / 2 - gameOverResultShow.Height / 2;
+            this.Controls.Add(gameOverResultShow);
+            gameOverResultShow.Hide();
 
+            settingsButton.Size = new Size(80, 80);
+            settingsButton.Left = gameOverResultShow.Right + 10;
+            settingsButton.Top = 0;
+            settingsButton.Image = Resource1.cog;
+            settingsButton.Click += showSettingsMenu;
+            this.Controls.Add(settingsButton);
+
+            Boxes = new Box[columns, rows];
+            int posx = 0, posy = topPanelH;
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < columns; j++)
@@ -212,18 +290,24 @@ namespace Minesweeper
                     box.Left = posx; box.Top = posy;
 
                     box.Text = "";
-                    using (var g = box.CreateGraphics())
+                    box.TextAlign = ContentAlignment.MiddleCenter;
+
+                    if (createGraphics)
                     {
-                        var fontSize = (Math.Min(boxW, boxH) * (72f / g.DpiY)) - 1;
-                        box.TextAlign = ContentAlignment.MiddleCenter;
-                        box.Font = new Font(new FontFamily(GenericFontFamilies.SansSerif), fontSize, FontStyle.Bold);
+                        using (var g = box.CreateGraphics())
+                        {
+                            fontSizeBox = (Math.Min(boxW, boxH) * (72f / g.DpiY)) - 1;
+                        }
+
+                        createGraphics = false;
                     }
+
+                    box.Font = new Font(new FontFamily(GenericFontFamilies.SansSerif), fontSizeBox, FontStyle.Bold);
                     box.BorderStyle = BorderStyle.FixedSingle;
 
-                    box.MouseClick += boxMousePressed;
+                    box.MouseClick += box_MousePressed;
 
                     Boxes[j, i] = box;
-
                     this.Controls.Add(box);
                     if (i == 0 && j == 0) defaultBoxColor = box.BackColor;
 
@@ -232,33 +316,68 @@ namespace Minesweeper
                 posx = 0;
                 posy += boxH;
             }
+
+            settingsMenu = new SettingsMenu();
+
+            this.ResumeLayout(false); ;
+            this.PerformLayout();
+
+            this.Show();
+            this.BringToFront();
         }
 
-        private void RestartButton_Click(object sender, EventArgs e)
+        void showSettingsMenu(object sender, EventArgs e)
         {
-            this.Controls.Clear();
+            settingsMenu.Show();
+            this.Hide();
+        }
+
+        void RestartButton_Click(object sender, EventArgs e)
+        {
+            this.SuspendLayout();
 
             assignDefaultValues();
-            initGameWindow();
-            assignBombs();
+
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < columns; j++)
+                {
+                    Boxes[j, i].isBomb = false;
+                    Boxes[j, i].isOpen = false;
+                    Boxes[j, i].isFlag = false;
+                    Boxes[j, i].nearbyBombs = 0;
+                    Boxes[j, i].Text = "";
+                    Boxes[j, i].BackColor = defaultBoxColor;
+                    Boxes[j, i].Image = null;
+                    Boxes[j, i].Enabled = true;
+                    Boxes[j, i].nearbyFlags = 0;
+                }
+            }
+
+            restartButton.Image = Resource1.smileyNormal;
+            showRFlag.Text = rFlag.ToString();
+            gameOverResultShow.Hide();
+
+            this.ResumeLayout(false);
         }
 
         void gameOver()
         {
             if (!victory)
             {
+                gameOverResultShow.Text = "You Lose";
+
                 restartButton.Image = Resource1.smileySad;
 
                 foreach (Box b in Boxes)
                 {
                     if (b.isBomb)
                     {
-                        b.BackColor = boxOpenColor;
                         b.Image = bombImageForBox;
                     }
-                    else if (b.nearby > 0)
+                    else if (b.nearbyBombs > 0)
                     {
-                        b.Text = b.nearby.ToString();
+                        b.Text = b.nearbyBombs.ToString();
                         b.BackColor = boxOpenColor;
                     }
 
@@ -268,19 +387,36 @@ namespace Minesweeper
 
             else if (victory)
             {
+                gameOverResultShow.Text = "You Win!";
+
                 restartButton.Image = Resource1.smileyHappy;
 
                 foreach (Box b in Boxes)
                 {
-                    b.Click += (s, e) => { return; };
                     if (!b.isOpen) b.BackColor = boxOpenColor;
+                    if (b.isBomb && !b.isFlag) b.Image = bombImageForBox;
                 }
             }
+
+            gameOverResultShow.Show();
         }
 
-        void boxMousePressed(object sender, MouseEventArgs e)
+        void box_MousePressed(object sender, MouseEventArgs e)
         {
+            if (_gameOver)
+            {
+                return;
+            }
+
             Box box = (Box)sender;
+
+            if (firstClick)
+            {
+                firstClickX = box.x;
+                firstClickY = box.y;
+                firstClick = false;
+                assignBombs();
+            }
 
             if (e.Button == MouseButtons.Left)
             {
@@ -288,8 +424,15 @@ namespace Minesweeper
 
                 if (box.isFlag) return;
 
+                else if (box.isOpen && box.nearbyBombs > 0)
+                {
+                    if (box.nearbyFlags == box.nearbyBombs) openNearbyBoxesNumbered(box.x, box.y);
+                }
+
                 if (box.isBomb)
                 {
+                    _gameOver = true;
+                    victory = false;
                     gameOver();
                     return;
                 }
@@ -313,6 +456,21 @@ namespace Minesweeper
 
                     if (box.isBomb)
                         sFlag++;
+
+                    for (int i = -1; i <= 1; i++)
+                    {
+                        for (int j = -1; j <= 1; j++)
+                        {
+                            if (j == 0 && i == 0) continue;
+
+                            int nx = box.x + j;
+                            int ny = box.y + i;
+
+                            if (nx < 0 || nx >= columns || ny < 0 || ny >= rows) continue;
+
+                            Boxes[nx, ny].nearbyFlags++;
+                        }
+                    }
                 }
                 else if (box.isFlag)
                 {
@@ -324,25 +482,228 @@ namespace Minesweeper
 
                     if (box.isBomb)
                         sFlag--;
-                }
 
-                if (sFlag == nBomb)
-                {
-                    victory = true;
-                    gameOver();
-                    return;
+                    for (int i = -1; i <= 1; i++)
+                    {
+                        for (int j = -1; j <= 1; j++)
+                        {
+                            if (j == 0 && i == 0) continue;
+
+                            int nx = box.x + j;
+                            int ny = box.y + i;
+
+                            if (nx < 0 || nx >= columns || ny < 0 || ny >= rows) continue;
+
+                            Boxes[nx, ny].nearbyFlags--;
+                        }
+                    }
                 }
+            }
+            else return;
+
+            if (openBoxes == Boxes.Length - nBomb)
+            {
+                victory = true;
+                _gameOver = true;
+                gameOver();
+                return;
             }
         }
 
-        public Form1()
-        {
+        public GameForm()
+        {  
             SetProcessDPIAware();
-            InitializeComponent();
+            this.DoubleBuffered = true;
 
-            assignDefaultValues();
-            initGameWindow();
-            assignBombs();
+            initGame();
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                cp.ExStyle |= 0x02000000; // WS_EX_COMPOSITED
+                return cp;
+            }
+        }
+    }
+
+    public partial class SettingsMenu : Form
+    {
+        static Label makeLabel(string Text, float fontSize, int Left, int Top)
+        {
+            Label lbl = new Label();
+            lbl.Text = Text;
+            lbl.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSize);
+            lbl.AutoSize = true;
+            lbl.Width = (int)fontSize * Text.ToCharArray().Length;
+            lbl.Height += 20;
+            lbl.Left = Left; lbl.Top = Top;
+            return lbl;
+        }
+
+        static NumericUpDown makeNumericUpDown(int Value, int Increment, int Minimum, float fontSize, int Width, int Left, int Top)
+        {
+            NumericUpDown nup = new NumericUpDown();
+            nup.Value = Value;
+            nup.Increment = Increment;
+            nup.Minimum = Minimum;
+            nup.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSize);
+            nup.Width = Width;
+            nup.Left = Left;
+            nup.Top = Top;
+            TextBox editBox = nup.Controls.OfType<TextBox>().First();
+            editBox.SelectionStart = editBox.Text.Length;
+            editBox.SelectionLength = 0;
+            return nup;
+        }
+
+        static Button makeButton(Color backColor, Color textColor, Color borderColor, string Text, float fontSize, int width, int height, int left, int top)
+        {
+            Button button = new Button();
+            button.BackColor = backColor;
+            button.ForeColor = textColor;
+            button.Text = Text;
+            button.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSize);
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderColor = borderColor;
+            button.FlatAppearance.BorderSize = 4;
+            button.Width = width;
+            button.Height = height;
+            button.Left = left;
+            button.Top = top;
+            return button;
+        }
+
+        static void numericUpDown_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (e.KeyChar == '.' || e.KeyChar == ',') e.Handled = true;
+        }
+
+        void saveSettings(object sender, EventArgs e)
+        {
+            if (GameForm.nBomb != (int)nBombSelect.Value || GameForm.columns != (int)columnsSelect.Value || GameForm.rows != (int)rowsSelect.Value)
+            {
+                if (lbl4.Visible) lbl4.Hide();
+
+                DialogResult choice = MessageBox.Show("Changing the settings will start a new game. Do you really want to save?", "Warning", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+                if (choice == DialogResult.Yes)
+                {
+                    GameForm.userChangedSettings = true;
+
+                    GameForm.nBomb = (int)nBombSelect.Value;
+                    GameForm.columns = (int)columnsSelect.Value;
+                    GameForm.rows = (int)rowsSelect.Value;
+
+                    this.Hide();
+
+                    Program.gameForm.Controls.Clear();
+                    Program.gameForm.initGame();
+                }
+            }
+
+            else if (!lbl4.Visible) lbl4.Show();
+        }
+        void hideSettingsMenu(object sender, EventArgs e)
+        {
+            if (GameForm.nBomb != (int)nBombSelect.Value || GameForm.columns != (int)columnsSelect.Value || GameForm.rows != (int)rowsSelect.Value)
+            {
+                DialogResult choice = MessageBox.Show("You have unsaved changes. Save settings?", "Warning", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+                if (choice == DialogResult.Yes)
+                {
+                    saveSettings(sender, e);
+                }
+
+                else if (choice == DialogResult.No)
+                {
+                    nBombSelect.Value = GameForm.nBomb;
+                    columnsSelect.Value = GameForm.columns;
+                    rowsSelect.Value = GameForm.rows;
+                }
+            }
+
+            Program.gameForm.Show();
+            this.Hide();
+        }
+
+        static NumericUpDown nBombSelect;
+        static NumericUpDown rowsSelect;
+        static NumericUpDown columnsSelect;
+        static Label lbl4;
+        public SettingsMenu()
+        {
+            this.DoubleBuffered = true;
+
+            this.ClientSize = new Size(600, 800);
+            this.Text = "Settings";
+            this.StartPosition = FormStartPosition.Manual;
+            this.Left = 10;
+            this.Top = 10;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.ShowInTaskbar = true;
+            this.ControlBox = false;
+
+            Label lbl1 = makeLabel("Number of bombs:", 16, 0, 0);
+            nBombSelect = makeNumericUpDown(GameForm.nBomb, 1, 1, lbl1.Font.Size, 120, lbl1.Right + 10, 0);
+            nBombSelect.KeyPress += numericUpDown_KeyPress;
+
+            Label lbl2 = makeLabel("Columns:", 16, 0, nBombSelect.Bottom + 10);
+            columnsSelect = makeNumericUpDown(GameForm.columns, 1, 1, lbl2.Font.Size, nBombSelect.Width, nBombSelect.Left, lbl2.Top);
+            columnsSelect.KeyPress += numericUpDown_KeyPress;
+
+            Label lbl3 = makeLabel("Rows:", 16, 0, columnsSelect.Bottom + 10);
+            rowsSelect = makeNumericUpDown(GameForm.rows, 1, 1, lbl3.Font.Size, columnsSelect.Width, columnsSelect.Left, lbl3.Top);
+            rowsSelect.KeyPress += numericUpDown_KeyPress;
+
+            lbl4 = makeLabel("No changes!", 16, 0, rowsSelect.Bottom + 10);
+            lbl4.ForeColor = Color.Red;
+            lbl4.Hide();
+
+            Button saveButton = makeButton(Color.Green, Color.White, Color.Black, "SAVE", 16, 120, 60, 0, 0);
+            saveButton.Left = this.ClientSize.Width / 2 - saveButton.Width - 3;
+            saveButton.Top = this.ClientSize.Height - saveButton.Height - 5;
+            saveButton.Click += saveSettings;
+
+            Button cancelButton = makeButton(Color.LightGray, Color.DarkRed, Color.Red, "CANCEL", 11, 120, 60, 0, 0);
+            cancelButton.Left = this.ClientSize.Width / 2 + 3;
+            cancelButton.Top = saveButton.Top;
+            cancelButton.Click += hideSettingsMenu;
+
+            this.Controls.Add(lbl1);
+            this.Controls.Add(nBombSelect);
+            this.Controls.Add(lbl2);
+            this.Controls.Add(columnsSelect);
+            this.Controls.Add(lbl3);
+            this.Controls.Add(rowsSelect);
+            this.Controls.Add(lbl4);
+            this.Controls.Add(saveButton);
+            this.Controls.Add(cancelButton);
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                const int CS_NOCLOSE = 0x200;
+                CreateParams cp = base.CreateParams;
+                cp.ClassStyle |= CS_NOCLOSE;
+                return cp;
+            }
+        }
+    }
+
+    public class Box : Label
+    {
+        public bool isBomb = false, isOpen = false, isFlag = false;
+        public int nearbyBombs = 0, nearbyFlags = 0;
+        public int x, y;
+
+        public Box() : base()
+        {
+            this.TabStop = false;
         }
     }
 }

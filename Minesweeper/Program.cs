@@ -7,13 +7,17 @@ namespace Minesweeper
         /// <summary>
         /// The main entry point for the application.
         /// </summary>
+
+        public static GameForm gameForm;
+
         [STAThread]
         static void Main()
         {
 
             System.Windows.Forms.Application.EnableVisualStyles();
             System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
-            System.Windows.Forms.Application.Run(new Form1());
+            gameForm = new GameForm();
+            System.Windows.Forms.Application.Run(gameForm);
         }
     }
 }
