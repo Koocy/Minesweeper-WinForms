@@ -40,14 +40,10 @@ namespace Minesweeper
         int boxW, boxH;
         //
 
-        //Hardcoded, for now
         int topPanelH, gameAreaH;
-        //
 
-        //TODO: Make different visual styles
         Color defaultBoxColor;
         Color boxOpenColor = Color.LightGray;
-        //
 
         void assignDefaultValues()
         {
@@ -59,7 +55,7 @@ namespace Minesweeper
 
             if (!userChangedSettings)
             {
-                nBomb = 2;
+                nBomb = 16;
                 columns = 10;
                 rows = 12;
             }
@@ -218,7 +214,11 @@ namespace Minesweeper
             this.ClientSize = new Size(600, 800);
             this.StartPosition = FormStartPosition.Manual;
             if (!userChangedSettings)
-            this.Left = 10; this.Top = 10;
+            {
+                this.Left = 10;
+                this.Top = 10;
+            }
+            this.BackColor = Color.White;
 
             assignDefaultValues();
 
@@ -317,6 +317,7 @@ namespace Minesweeper
                 posy += boxH;
             }
 
+            if (!userChangedSettings)
             settingsMenu = new SettingsMenu();
 
             this.ResumeLayout(false); ;
@@ -517,75 +518,84 @@ namespace Minesweeper
 
             initGame();
         }
-
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                var cp = base.CreateParams;
-                cp.ExStyle |= 0x02000000; // WS_EX_COMPOSITED
-                return cp;
-            }
-        }
     }
 
     public partial class SettingsMenu : Form
     {
-        static Label makeLabel(string Text, float fontSize, int Left, int Top)
+        Label makeLabel(string Text, float fontSize, int Left, int Top, bool setWidth, int? Width)
         {
             Label lbl = new Label();
             lbl.Text = Text;
             lbl.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSize);
             lbl.AutoSize = true;
-            lbl.Width = (int)fontSize * Text.ToCharArray().Length;
+            lbl.Width = setWidth ? (int)Width : (int)fontSize * Text.ToCharArray().Length;
             lbl.Height += 20;
             lbl.Left = Left; lbl.Top = Top;
             return lbl;
         }
 
-        static NumericUpDown makeNumericUpDown(int Value, int Increment, int Minimum, float fontSize, int Width, int Left, int Top)
+        NumericUpDown makeNumericUpDown(int Value, int Increment, int Minimum, int Maximum, float fontSize, int Width, int Left, int Top)
         {
-            NumericUpDown nup = new NumericUpDown();
-            nup.Value = Value;
-            nup.Increment = Increment;
-            nup.Minimum = Minimum;
-            nup.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSize);
-            nup.Width = Width;
-            nup.Left = Left;
-            nup.Top = Top;
-            TextBox editBox = nup.Controls.OfType<TextBox>().First();
+            NumericUpDown nud = new NumericUpDown();
+            nud.Value = Value;
+            nud.Increment = Increment;
+            nud.Minimum = Minimum;
+            nud.Maximum = Maximum;
+            nud.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSize);
+            nud.Width = Width;
+            nud.Left = Left;
+            nud.Top = Top;
+            TextBox editBox = nud.Controls.OfType<TextBox>().First();
             editBox.SelectionStart = editBox.Text.Length;
             editBox.SelectionLength = 0;
-            return nup;
+            return nud;
         }
 
-        static Button makeButton(Color backColor, Color textColor, Color borderColor, string Text, float fontSize, int width, int height, int left, int top)
+        Button makeButton(Color backColor, Color textColor, Color borderColor, string Text, float fontSize, int width, int height, int left, int top)
         {
-            Button button = new Button();
-            button.BackColor = backColor;
-            button.ForeColor = textColor;
-            button.Text = Text;
-            button.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSize);
-            button.FlatStyle = FlatStyle.Flat;
-            button.FlatAppearance.BorderColor = borderColor;
-            button.FlatAppearance.BorderSize = 4;
-            button.Width = width;
-            button.Height = height;
-            button.Left = left;
-            button.Top = top;
-            return button;
+            Button btn = new Button();
+            btn.BackColor = backColor;
+            btn.ForeColor = textColor;
+            btn.Text = Text;
+            btn.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSize);
+            btn.FlatStyle = FlatStyle.Flat;
+            btn.FlatAppearance.BorderColor = borderColor;
+            btn.FlatAppearance.BorderSize = 4;
+            btn.Width = width;
+            btn.Height = height;
+            btn.Left = left;
+            btn.Top = top;
+            return btn;
         }
 
-        static void numericUpDown_KeyPress(object sender, KeyPressEventArgs e)
+        void numericUpDown_KeyPress(object sender, KeyPressEventArgs e)
         {
             if (e.KeyChar == '.' || e.KeyChar == ',') e.Handled = true;
+        }
+
+        async void hideWarningLabelAfterAWhile()
+        {
+            if (warningType == 1)
+                await Task.Delay(2500);
+            else if (warningType == 2)
+                await Task.Delay(4000); 
+            warningLabel.Hide();
         }
 
         void saveSettings(object sender, EventArgs e)
         {
             if (GameForm.nBomb != (int)nBombSelect.Value || GameForm.columns != (int)columnsSelect.Value || GameForm.rows != (int)rowsSelect.Value)
             {
-                if (lbl4.Visible) lbl4.Hide();
+                if (warningLabel.Visible) warningLabel.Hide();
+
+                if (nBombSelect.Value >= (columnsSelect.Value * rowsSelect.Value))
+                {
+                    warningLabel.Text = "Number of bombs cant't be higher than or equal to number of total boxes (rows times columns)";
+                    warningType = 2;
+                    if (!warningLabel.Visible) warningLabel.Show();
+                    hideWarningLabelAfterAWhile();
+                    return;
+                }
 
                 DialogResult choice = MessageBox.Show("Changing the settings will start a new game. Do you really want to save?", "Warning", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
 
@@ -604,8 +614,15 @@ namespace Minesweeper
                 }
             }
 
-            else if (!lbl4.Visible) lbl4.Show();
+            else
+            {
+                warningLabel.Text = "No changes!";
+                warningType = 1;
+                if (!warningLabel.Visible) warningLabel.Show();
+                hideWarningLabelAfterAWhile();
+            }
         }
+
         void hideSettingsMenu(object sender, EventArgs e)
         {
             if (GameForm.nBomb != (int)nBombSelect.Value || GameForm.columns != (int)columnsSelect.Value || GameForm.rows != (int)rowsSelect.Value)
@@ -622,17 +639,26 @@ namespace Minesweeper
                     nBombSelect.Value = GameForm.nBomb;
                     columnsSelect.Value = GameForm.columns;
                     rowsSelect.Value = GameForm.rows;
+
+                    if (warningLabel.Visible) warningLabel.Hide();
+                    Program.gameForm.Show();
+                    this.Hide();
                 }
             }
 
-            Program.gameForm.Show();
-            this.Hide();
+            else
+            {
+                if (warningLabel.Visible) warningLabel.Hide();
+                Program.gameForm.Show();
+                this.Hide();
+            }
         }
 
-        static NumericUpDown nBombSelect;
-        static NumericUpDown rowsSelect;
-        static NumericUpDown columnsSelect;
-        static Label lbl4;
+        NumericUpDown nBombSelect;
+        NumericUpDown rowsSelect;
+        NumericUpDown columnsSelect;
+        Label warningLabel;
+        int warningType;
         public SettingsMenu()
         {
             this.DoubleBuffered = true;
@@ -646,21 +672,23 @@ namespace Minesweeper
             this.ShowInTaskbar = true;
             this.ControlBox = false;
 
-            Label lbl1 = makeLabel("Number of bombs:", 16, 0, 0);
-            nBombSelect = makeNumericUpDown(GameForm.nBomb, 1, 1, lbl1.Font.Size, 120, lbl1.Right + 10, 0);
+            Label nBombLabel = makeLabel("Number of bombs:", 16, 0, 0, false, null);
+            nBombSelect = makeNumericUpDown(GameForm.nBomb, 1, 1, 100, nBombLabel.Font.Size, 120, nBombLabel.Right + 10, 0);
             nBombSelect.KeyPress += numericUpDown_KeyPress;
 
-            Label lbl2 = makeLabel("Columns:", 16, 0, nBombSelect.Bottom + 10);
-            columnsSelect = makeNumericUpDown(GameForm.columns, 1, 1, lbl2.Font.Size, nBombSelect.Width, nBombSelect.Left, lbl2.Top);
+            Label columnsLabel = makeLabel("Columns:", 16, 0, nBombSelect.Bottom + 10, false, null);
+            columnsSelect = makeNumericUpDown(GameForm.columns, 1, 5, 25, columnsLabel.Font.Size, nBombSelect.Width, nBombSelect.Left, columnsLabel.Top);
             columnsSelect.KeyPress += numericUpDown_KeyPress;
 
-            Label lbl3 = makeLabel("Rows:", 16, 0, columnsSelect.Bottom + 10);
-            rowsSelect = makeNumericUpDown(GameForm.rows, 1, 1, lbl3.Font.Size, columnsSelect.Width, columnsSelect.Left, lbl3.Top);
+            Label rowsLabel = makeLabel("Rows:", 16, 0, columnsSelect.Bottom + 10, false, null);
+            rowsSelect = makeNumericUpDown(GameForm.rows, 1, 5, 25, rowsLabel.Font.Size, columnsSelect.Width, columnsSelect.Left, rowsLabel.Top);
             rowsSelect.KeyPress += numericUpDown_KeyPress;
 
-            lbl4 = makeLabel("No changes!", 16, 0, rowsSelect.Bottom + 10);
-            lbl4.ForeColor = Color.Red;
-            lbl4.Hide();
+            warningLabel = makeLabel("No changes!", 16, 0, rowsSelect.Bottom + 10, true, this.ClientSize.Width);
+            warningLabel.MaximumSize = new Size(warningLabel.Width, 0);
+            warningLabel.ForeColor = Color.Red;
+            warningLabel.Hide();
+            warningType = 1;
 
             Button saveButton = makeButton(Color.Green, Color.White, Color.Black, "SAVE", 16, 120, 60, 0, 0);
             saveButton.Left = this.ClientSize.Width / 2 - saveButton.Width - 3;
@@ -672,26 +700,15 @@ namespace Minesweeper
             cancelButton.Top = saveButton.Top;
             cancelButton.Click += hideSettingsMenu;
 
-            this.Controls.Add(lbl1);
+            this.Controls.Add(nBombLabel);
             this.Controls.Add(nBombSelect);
-            this.Controls.Add(lbl2);
+            this.Controls.Add(columnsLabel);
             this.Controls.Add(columnsSelect);
-            this.Controls.Add(lbl3);
+            this.Controls.Add(rowsLabel);
             this.Controls.Add(rowsSelect);
-            this.Controls.Add(lbl4);
+            this.Controls.Add(warningLabel);
             this.Controls.Add(saveButton);
             this.Controls.Add(cancelButton);
-        }
-
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                const int CS_NOCLOSE = 0x200;
-                CreateParams cp = base.CreateParams;
-                cp.ClassStyle |= CS_NOCLOSE;
-                return cp;
-            }
         }
     }
 
