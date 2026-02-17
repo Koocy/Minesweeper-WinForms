@@ -356,20 +356,19 @@ namespace Minesweeper
         }
 
         static float fontSizeBox = 0.00f;
-        static float fontSizeLabel = 0.00f;
         public static void initGame()
         {
+            gameForm.SuspendLayout();
+
+            assignDefaultValues();
+
             if (firstRun)
             {
                 settingsMenu = new SettingsMenu();
                 firstRun = false;
             }
 
-            gameForm.SuspendLayout();
-
-            assignDefaultValues();
-
-            int boxW = 0, boxH = 0, cr = Math.Max(columns, rows);;
+            int boxW = 0, boxH = 0;
 
             if (Math.Max(columns, rows) > 20)
             {
@@ -385,10 +384,13 @@ namespace Minesweeper
                 boxSize = Math.Min(boxW, boxH);
             }
 
-            topPanelH = gameForm.ClientSize.Height / 20;
+            if (!useBoxWandH)
+                topPanelH = boxSize;
+            else
+                topPanelH = Math.Max(boxW, boxH);
            
             if (!useBoxWandH)
-                gameForm.ClientSize = new Size(boxSize * cr, (boxSize * cr) + topPanelH);
+                gameForm.ClientSize = new Size(boxSize * columns, (boxSize * rows) + topPanelH);
             else
                 gameForm.ClientSize = new Size(boxW * columns, (boxH * rows) + topPanelH);
         
@@ -419,6 +421,8 @@ namespace Minesweeper
                             else
                                 fontSizeBox = boxH * 72f / g.DpiY - 4;
                         }
+
+                        calcFontSize = false;
                     }
 
                     box.Font = new Font(new FontFamily(GenericFontFamilies.SansSerif), fontSizeBox, FontStyle.Bold);
@@ -465,22 +469,16 @@ namespace Minesweeper
             restartButton.SizeMode = PictureBoxSizeMode.StretchImage;
             gameForm.Controls.Add(restartButton);
 
-            rFlagLabel.Size = restartButton.Size;
-            rFlagLabel.Left = gameForm.ClientSize.Width - rFlagLabel.Width;
+            if (!useBoxWandH)
+                rFlagLabel.Size = new Size(boxSize*2, topPanelH);
+            else
+                rFlagLabel.Size = new Size(boxW*2, topPanelH);
+            rFlagLabel.Left = Boxes[columns-2, 0].Left;
             rFlagLabel.Top = 0;
             rFlagLabel.Text = rFlag.ToString();
             rFlagLabel.TextAlign = ContentAlignment.MiddleCenter;
 
-            if (calcFontSize)
-            {
-                    using (var g = rFlagLabel.CreateGraphics())
-                    {
-                        fontSizeLabel = rFlagLabel.Height * 72f / g.DpiY / rFlag.ToString().Length - 4;
-                    }
-                calcFontSize = false;
-            }
-
-            rFlagLabel.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSizeLabel, FontStyle.Bold);
+            rFlagLabel.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSizeBox, FontStyle.Bold);
             gameForm.Controls.Add(rFlagLabel);
 
             flagIcon.Size = restartButton.Size;
