@@ -6,3 +6,4 @@
 .vs/
 
 # Add other file types you want to ignore, if necessary
+*.suo
