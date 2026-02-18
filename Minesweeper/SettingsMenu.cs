@@ -10,7 +10,7 @@ using System.Windows.Forms;
 
 namespace Minesweeper
 {
-    public partial class SettingsMenu : Form
+    public class SettingsMenu : Form
     {
         Label makeLabel(string Text, float fontSize, int Left, int Top, bool setWidth, int? Width)
         {
@@ -65,7 +65,7 @@ namespace Minesweeper
             if (e.KeyChar == '.' || e.KeyChar == ',') e.Handled = true;
         }
 
-        static Task Delay(int ms)
+        Task Delay(int ms)
         {
             TaskCompletionSource<object> tcs = new TaskCompletionSource<object>();
             System.Threading.Timer timer = new System.Threading.Timer(_ =>
@@ -86,7 +86,7 @@ namespace Minesweeper
             });
         }
 
-        void saveSettings(object sender, EventArgs e)
+        void saveSettings(Game gameRef)
         {
             if (warningLabel.Visible) warningLabel.Hide();
 
@@ -98,15 +98,12 @@ namespace Minesweeper
                 return;
             }
 
-            Program.userChangedSettings = true;
-
-            Program.nBomb = (int)nBombSelect.Value;
-            Program.columns = (int)columnsSelect.Value;
-            Program.rows = (int)rowsSelect.Value;
+            gameRef.nBomb = (int)nBombSelect.Value;
+            gameRef.columns = (int)columnsSelect.Value;
+            gameRef.rows = (int)rowsSelect.Value;
 
             using (StreamWriter sw = new StreamWriter("minesweeper_settings"))
             {
-                sw.Write("1 ");
                 sw.Write(nBombSelect.Value + " ");
                 sw.Write(columnsSelect.Value + " ");
                 sw.Write(rowsSelect.Value + " ");
@@ -114,30 +111,30 @@ namespace Minesweeper
 
             this.Hide();
 
-            Program.gameForm.Controls.Clear();
-            Program.initGame();
-            Program.gameForm.Show();
+            gameRef.Controls.Clear();
+            gameRef.initGame();
+            gameRef.Show();
         }
 
-        void hideSettingsMenu(object sender, EventArgs e)
+        void hideSettingsMenu(Game gameRef)
         {
-            if (Program.nBomb != (int)nBombSelect.Value || Program.columns != (int)columnsSelect.Value || Program.rows != (int)rowsSelect.Value)
+            if (gameRef.nBomb != (int)nBombSelect.Value || gameRef.columns != (int)columnsSelect.Value || gameRef.rows != (int)rowsSelect.Value)
             {
                 DialogResult choice = MessageBox.Show("You have unsaved changes. Save settings?", "Warning", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
 
                 if (choice == DialogResult.Yes)
                 {
-                    saveSettings(sender, e);
+                    saveSettings(gameRef);
                 }
 
                 else if (choice == DialogResult.No)
                 {
-                    nBombSelect.Value = Program.nBomb;
-                    columnsSelect.Value = Program.columns;
-                    rowsSelect.Value = Program.rows;
+                    nBombSelect.Value = gameRef.nBomb;
+                    columnsSelect.Value = gameRef.columns;
+                    rowsSelect.Value = gameRef.rows;
 
                     if (warningLabel.Visible) warningLabel.Hide();
-                    Program.gameForm.Show();
+                    gameRef.Show();
                     this.Hide();
                 }
             }
@@ -145,7 +142,7 @@ namespace Minesweeper
             else
             {
                 if (warningLabel.Visible) warningLabel.Hide();
-                Program.gameForm.Show();
+                gameRef.Show();
                 this.Hide();
             }
         }
@@ -154,7 +151,8 @@ namespace Minesweeper
         NumericUpDown rowsSelect;
         NumericUpDown columnsSelect;
         Label warningLabel;
-        public SettingsMenu()
+
+        public SettingsMenu(Game gameRef)
         {
             this.DoubleBuffered = true;
             this.ShowInTaskbar = false;
@@ -170,15 +168,15 @@ namespace Minesweeper
             this.ControlBox = false;
 
             Label nBombLabel = makeLabel("Number of bombs:", 16, 0, 0, false, null);
-            nBombSelect = makeNumericUpDown(Program.nBomb, 1, 1, 400, nBombLabel.Font.Size, 120, nBombLabel.Right + 10, 0);
+            nBombSelect = makeNumericUpDown(gameRef.nBomb, 1, 1, 400, nBombLabel.Font.Size, 120, nBombLabel.Right + 10, 0);
             nBombSelect.KeyPress += numericUpDown_KeyPress;
 
             Label columnsLabel = makeLabel("Columns:", 16, 0, nBombSelect.Bottom + 10, false, null);
-            columnsSelect = makeNumericUpDown(Program.columns, 1, 5, 50, columnsLabel.Font.Size, nBombSelect.Width, nBombSelect.Left, columnsLabel.Top);
+            columnsSelect = makeNumericUpDown(gameRef.columns, 1, 5, 50, columnsLabel.Font.Size, nBombSelect.Width, nBombSelect.Left, columnsLabel.Top);
             columnsSelect.KeyPress += numericUpDown_KeyPress;
 
             Label rowsLabel = makeLabel("Rows:", 16, 0, columnsSelect.Bottom + 10, false, null);
-            rowsSelect = makeNumericUpDown(Program.rows, 1, 5, 50, rowsLabel.Font.Size, columnsSelect.Width, columnsSelect.Left, rowsLabel.Top);
+            rowsSelect = makeNumericUpDown(gameRef.rows, 1, 5, 50, rowsLabel.Font.Size, columnsSelect.Width, columnsSelect.Left, rowsLabel.Top);
             rowsSelect.KeyPress += numericUpDown_KeyPress;
 
             warningLabel = makeLabel("", 16, 0, rowsSelect.Bottom + 10, true, this.ClientSize.Width);
@@ -188,12 +186,12 @@ namespace Minesweeper
             Button saveButton = makeButton(Color.Green, Color.White, Color.Black, "SAVE", 16, 120, 60, 0, 0);
             saveButton.Left = this.ClientSize.Width / 2 - saveButton.Width - 3;
             saveButton.Top = this.ClientSize.Height - saveButton.Height - 5;
-            saveButton.Click += saveSettings;
+            saveButton.Click += (s, e) => { saveSettings(gameRef); };
 
             Button cancelButton = makeButton(Color.LightGray, Color.DarkRed, Color.Red, "CANCEL", 11, 120, 60, 0, 0);
             cancelButton.Left = this.ClientSize.Width / 2 + 3;
             cancelButton.Top = saveButton.Top;
-            cancelButton.Click += hideSettingsMenu;
+            cancelButton.Click += (s, e) => { hideSettingsMenu(gameRef); };
 
             this.Controls.Add(nBombLabel);
             this.Controls.Add(nBombSelect);
