@@ -30,6 +30,31 @@ namespace Minesweeper
 
         SettingsMenu settingsMenu;
 
+        public int[] getCurrentSettings()
+        {
+            if (File.Exists("minesweeper_settings"))
+            {
+                try
+                {
+                    using (StreamReader sr = new StreamReader("minesweeper_settings"))
+                    {
+                        string[] parameters = sr.ReadToEnd().Split(' ');
+
+                        int _nBomb = int.Parse(parameters[0]), _columns = int.Parse(parameters[1]), _rows = int.Parse(parameters[2]);
+
+                        return new int[] { _nBomb, _columns, _rows };
+                    }
+                }
+                catch
+                {
+                    File.Delete("minesweeper_settings");
+                    return new int[] { 16, 10, 12 };
+                }
+            }
+
+            else return new int[] { 16, 10, 12 };
+        }
+
         void assignDefaultValues()
         {
             _gameOver = false;
@@ -38,7 +63,7 @@ namespace Minesweeper
             firstClickX = -1; firstClickY = -1;
             calcFontSize = true;
 
-            int[] settings = GetCurrentSettings();
+            int[] settings = getCurrentSettings();
 
             nBomb = settings[0];
             columns = settings[1];
@@ -82,6 +107,175 @@ namespace Minesweeper
                 }
             }
         }
+
+        void calculateSizes()
+        {
+            int boxW = 0, boxH = 0, cr = Math.Max(columns, rows);
+
+            ClientSize = new Size((int)(Screen.PrimaryScreen.WorkingArea.Width * 0.9), (int)(Screen.PrimaryScreen.WorkingArea.Height * 0.9));
+
+            boxW = ClientSize.Width / columns;
+            boxH = ClientSize.Height / rows;
+            boxSize = Math.Max(boxW, boxH);
+
+            if (boxSize * cr > ClientSize.Width || boxSize * cr > ClientSize.Height)
+                if (rows >= columns) boxSize = ClientSize.Height / rows;
+                else boxSize = ClientSize.Width / columns;
+
+            topPanelH = boxSize;
+
+            ClientSize = new Size(boxSize * columns, (boxSize * rows) + topPanelH);
+        }
+
+        void makeBoxes()
+        {
+            Boxes = new Box[columns, rows];
+            int posx = 0, posy = topPanelH;
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < columns; j++)
+                {
+                    Box box = new Box();
+                    box.x = j; box.y = i;
+
+                    box.Size = new Size(boxSize, boxSize);
+
+                    box.Left = posx; box.Top = posy;
+
+                    box.Text = "";
+                    box.TextAlign = ContentAlignment.MiddleCenter;
+
+                    if (calcFontSize)
+                    {
+                        using (var g = box.CreateGraphics())
+                        {
+                            fontSizeBox = boxSize * 72f / g.DpiY - 4;
+                        }
+
+                        calcFontSize = false;
+                    }
+
+                    box.Font = new Font(new FontFamily(GenericFontFamilies.SansSerif), fontSizeBox, FontStyle.Bold);
+                    box.BorderStyle = BorderStyle.FixedSingle;
+
+                    box.MouseClick += box_MousePressed;
+
+                    Boxes[j, i] = box;
+                    Controls.Add(box);
+                    if (i == 0 && j == 0) defaultBoxColor = box.BackColor;
+
+                    posx += boxSize;
+                }
+                posx = 0;
+                posy += boxSize;
+            }
+        }
+
+        void initComponent()
+        {
+            flagImageForBox = new Bitmap(Resource1.flag, new Size(boxSize, boxSize));
+            bombImageForBox = new Bitmap(Resource1.bomb, new Size(boxSize, boxSize));
+
+            flagIcon = new PictureBox();
+            restartButton = new PictureBox();
+            settingsButton = new PictureBox();
+            rFlagLabel = new Label();
+
+            restartButton.Size = new Size(topPanelH, topPanelH);
+            restartButton.Left = ClientSize.Width / 2 - restartButton.Width / 2;
+            restartButton.Top = 0;
+            restartButton.Image = Resource1.smileyNormal;
+            restartButton.Click += RestartButton_Click;
+            restartButton.SizeMode = PictureBoxSizeMode.StretchImage;
+            Controls.Add(restartButton);
+
+            rFlagLabel.Size = new Size(boxSize * 2, topPanelH);
+            rFlagLabel.Left = Boxes[columns - 2, 0].Left;
+            rFlagLabel.Top = 0;
+            rFlagLabel.Text = rFlag.ToString();
+            rFlagLabel.TextAlign = ContentAlignment.MiddleCenter;
+
+            rFlagLabel.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSizeBox, FontStyle.Bold);
+            Controls.Add(rFlagLabel);
+
+            flagIcon.Size = restartButton.Size;
+            flagIcon.Left = rFlagLabel.Left - flagIcon.Width;
+            flagIcon.Top = 0;
+            flagIcon.Image = Resource1.flag;
+            flagIcon.SizeMode = PictureBoxSizeMode.StretchImage;
+            Controls.Add(flagIcon);
+
+            settingsButton.Size = restartButton.Size;
+            settingsButton.Left = 0;
+            settingsButton.Top = 0;
+            settingsButton.Image = Resource1.cog;
+            settingsButton.Click += showSettingsMenu;
+            settingsButton.SizeMode = PictureBoxSizeMode.StretchImage;
+            Controls.Add(settingsButton);
+        }
+
+        public void initGame()
+        {
+            SuspendLayout();
+
+            assignDefaultValues();
+
+            calculateSizes();
+
+            makeBoxes();
+
+            initComponent();
+
+            ResumeLayout(true);
+        }
+
+        void Restart()
+        {
+            SuspendLayout();
+
+            assignDefaultValues();
+
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < columns; j++)
+                {
+                    Boxes[j, i].isBomb = false;
+                    Boxes[j, i].isOpen = false;
+                    Boxes[j, i].isFlag = false;
+                    Boxes[j, i].nearbyBombs = 0;
+                    Boxes[j, i].Text = "";
+                    Boxes[j, i].BackColor = defaultBoxColor;
+                    Boxes[j, i].Image = null;
+                    Boxes[j, i].Enabled = true;
+                    Boxes[j, i].nearbyFlags = 0;
+                }
+            }
+
+            restartButton.Image = Resource1.smileyNormal;
+            rFlagLabel.Text = rFlag.ToString();
+
+            ResumeLayout(false);
+        }
+
+        public Game()
+        {
+            this.DoubleBuffered = true;
+
+            this.AutoScaleMode = AutoScaleMode.Dpi;
+            this.FormBorderStyle = FormBorderStyle.FixedToolWindow;
+            this.ShowInTaskbar = true;
+            this.Text = "Minesweeper";
+            this.ClientSize = new Size(Screen.PrimaryScreen.WorkingArea.Width / 5, Screen.PrimaryScreen.WorkingArea.Height / 2);
+            this.StartPosition = FormStartPosition.Manual;
+
+            this.BackColor = Color.White;
+
+            initGame();
+
+            settingsMenu = new SettingsMenu(this);
+        }
+
+        //-
 
         void openNearbyBoxes(int x, int y)
         {
@@ -211,33 +405,7 @@ namespace Minesweeper
             }
         }
 
-        void Restart()
-        {
-            SuspendLayout();
-
-            assignDefaultValues();
-
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < columns; j++)
-                {
-                    Boxes[j, i].isBomb = false;
-                    Boxes[j, i].isOpen = false;
-                    Boxes[j, i].isFlag = false;
-                    Boxes[j, i].nearbyBombs = 0;
-                    Boxes[j, i].Text = "";
-                    Boxes[j, i].BackColor = defaultBoxColor;
-                    Boxes[j, i].Image = null;
-                    Boxes[j, i].Enabled = true;
-                    Boxes[j, i].nearbyFlags = 0;
-                }
-            }
-
-            restartButton.Image = Resource1.smileyNormal;
-            rFlagLabel.Text = rFlag.ToString();
-
-            ResumeLayout(false);
-        }
+        //-
 
         void box_MousePressed(object sender, MouseEventArgs e)
         {
@@ -347,166 +515,12 @@ namespace Minesweeper
             Restart();
         }
 
-        public int[] GetCurrentSettings()
-        {
-            if (File.Exists("minesweeper_settings"))
-            {
-                try
-                {
-                    using (StreamReader sr = new StreamReader("minesweeper_settings"))
-                    {
-                        string[] parameters = sr.ReadToEnd().Split(' ');
-
-                        int _nBomb = int.Parse(parameters[0]), _columns = int.Parse(parameters[1]), _rows = int.Parse(parameters[2]);
-
-                        return new int[] { _nBomb, _columns, _rows };
-                    }
-                }
-                catch
-                {
-                    File.Delete("minesweeper_settings");
-                    return new int[] { 16, 10, 12 };
-                }
-            }
-
-            else return new int[] { 16, 10, 12 };
-        }
-
-        public void initGame()
-        {
-            SuspendLayout();
-
-            assignDefaultValues();
-
-            int boxW = 0, boxH = 0, cr = Math.Max(columns, rows);
-
-            ClientSize = new Size((int)(Screen.PrimaryScreen.WorkingArea.Width * 0.9), (int)(Screen.PrimaryScreen.WorkingArea.Height * 0.9));
-
-            boxW = ClientSize.Width / columns;
-            boxH = ClientSize.Height / rows;
-            boxSize = Math.Max(boxW, boxH);
-
-            if (boxSize * cr > ClientSize.Width || boxSize * cr > ClientSize.Height)
-                if (rows >= columns) boxSize = ClientSize.Height / rows;
-                else boxSize = ClientSize.Width / columns;
-
-            topPanelH = boxSize;
-
-            ClientSize = new Size(boxSize * columns, (boxSize * rows) + topPanelH);
-
-            Boxes = new Box[columns, rows];
-            int posx = 0, posy = topPanelH;
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < columns; j++)
-                {
-                    Box box = new Box();
-                    box.x = j; box.y = i;
-
-                    box.Size = new Size(boxSize, boxSize);
-
-                    box.Left = posx; box.Top = posy;
-
-                    box.Text = "";
-                    box.TextAlign = ContentAlignment.MiddleCenter;
-
-                    if (calcFontSize)
-                    {
-                        using (var g = box.CreateGraphics())
-                        {
-                            fontSizeBox = boxSize * 72f / g.DpiY - 4;
-                        }
-
-                        calcFontSize = false;
-                    }
-
-                    box.Font = new Font(new FontFamily(GenericFontFamilies.SansSerif), fontSizeBox, FontStyle.Bold);
-                    box.BorderStyle = BorderStyle.FixedSingle;
-
-                    box.MouseClick += box_MousePressed;
-
-                    Boxes[j, i] = box;
-                    Controls.Add(box);
-                    if (i == 0 && j == 0) defaultBoxColor = box.BackColor;
-
-                    posx += boxSize;
-                }
-                posx = 0;
-                posy += boxSize;
-            }
-
-            flagImageForBox = new Bitmap(Resource1.flag, new Size(boxSize, boxSize));
-            bombImageForBox = new Bitmap(Resource1.bomb, new Size(boxSize, boxSize));
-
-            flagIcon = new PictureBox();
-            restartButton = new PictureBox();
-            settingsButton = new PictureBox();
-            rFlagLabel = new Label();
-
-            restartButton.Size = new Size(topPanelH, topPanelH);
-            restartButton.Left = ClientSize.Width / 2 - restartButton.Width / 2;
-            restartButton.Top = 0;
-            restartButton.Image = Resource1.smileyNormal;
-            restartButton.Click += RestartButton_Click;
-            restartButton.SizeMode = PictureBoxSizeMode.StretchImage;
-            Controls.Add(restartButton);
-
-            rFlagLabel.Size = new Size(boxSize * 2, topPanelH);
-            rFlagLabel.Left = Boxes[columns - 2, 0].Left;
-            rFlagLabel.Top = 0;
-            rFlagLabel.Text = rFlag.ToString();
-            rFlagLabel.TextAlign = ContentAlignment.MiddleCenter;
-
-            rFlagLabel.Font = new Font(new FontFamily(GenericFontFamilies.Serif), fontSizeBox, FontStyle.Bold);
-            Controls.Add(rFlagLabel);
-
-            flagIcon.Size = restartButton.Size;
-            flagIcon.Left = rFlagLabel.Left - flagIcon.Width;
-            flagIcon.Top = 0;
-            flagIcon.Image = Resource1.flag;
-            flagIcon.SizeMode = PictureBoxSizeMode.StretchImage;
-            Controls.Add(flagIcon);
-
-            settingsButton.Size = restartButton.Size;
-            settingsButton.Left = 0;
-            settingsButton.Top = 0;
-            settingsButton.Image = Resource1.cog;
-            settingsButton.Click += showSettingsMenu;
-            settingsButton.SizeMode = PictureBoxSizeMode.StretchImage;
-            Controls.Add(settingsButton);
-
-            ResumeLayout(true);
-        }
-
         void showSettingsMenu(object sender, EventArgs e)
         {
             settingsMenu.Left = this.Left;
             settingsMenu.Top = this.Top;
             settingsMenu.Show();
             this.Hide();
-        }
-
-        public Game()
-        {
-            this.DoubleBuffered = true;
-
-            this.AutoScaleMode = AutoScaleMode.Dpi;
-            this.FormBorderStyle = FormBorderStyle.FixedToolWindow;
-            this.ShowInTaskbar = true;
-            this.Text = "Minesweeper";
-            this.ClientSize = new Size(Screen.PrimaryScreen.WorkingArea.Width / 5, Screen.PrimaryScreen.WorkingArea.Height / 2);
-            this.StartPosition = FormStartPosition.Manual;
-
-            this.BackColor = Color.White;
-
-            int[] settings = GetCurrentSettings();
-            nBomb = settings[0];
-            columns = settings[1];
-            rows = settings[2];
-
-            initGame();
-
-            settingsMenu = new SettingsMenu(this);
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
